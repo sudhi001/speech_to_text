@@ -454,6 +454,7 @@ class SpeechToText {
       @Deprecated('Use SpeechListenOptions.onDevice instead') onDevice = false,
       @Deprecated('Use SpeechListenOptions.listenMode instead')
       ListenMode listenMode = ListenMode.confirmation,
+      muteSound = false,
       @Deprecated('Use SpeechListenOptions.sampleRate instead') sampleRate = 0,
       SpeechListenOptions? listenOptions}) async {
     if (!_initWorked) {
@@ -477,6 +478,7 @@ class SpeechToText {
           partialResults: partialResults || null != pauseFor,
           onDevice: onDevice,
           listenMode: listenMode,
+          muteSound:muteSound
           sampleRate: sampleRate,
           cancelOnError: cancelOnError,
         );

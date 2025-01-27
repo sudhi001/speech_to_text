@@ -9,9 +9,11 @@ import android.bluetooth.BluetoothHeadset
 import android.bluetooth.BluetoothProfile
 import android.content.BroadcastReceiver
 import android.content.ComponentName
+import android.speech.RecognitionListener
 import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
+import android.media.AudioManager
 import android.content.pm.ResolveInfo
 import android.net.Uri
 import android.os.Build
@@ -198,7 +200,8 @@ public class SpeechToTextPlugin :
                                 "listenMode is required", null)
                         return
                     }
-                    startListening(result, localeId, partialResults, listenModeIndex, onDevice )
+                    val muteSound = call.argument<Boolean>("muteSound")
+                    startListening(result, localeId, partialResults, listenModeIndex, onDevice ,muteSound)
                 }
                 "stop" -> stopListening(result)
                 "cancel" -> cancelListening(result)
@@ -262,7 +265,7 @@ public class SpeechToTextPlugin :
     }
 
     private fun startListening(result: Result, languageTag: String, partialResults: Boolean,
-                               listenModeIndex: Int, onDevice: Boolean) {
+                               listenModeIndex: Int, onDevice: Boolean,muteSound: Boolean?) {
         if (sdkVersionTooLow() || isNotInitialized() || isListening()) {
             result.success(false)
             return
@@ -276,7 +279,53 @@ public class SpeechToTextPlugin :
         debugLog("Start listening")
 
         optionallyStartBluetooth()
-        setupRecognizerIntent(languageTag, partialResults, listenMode, onDevice )
+        setupRecognizerIntent(languageTag, partialResults, listenMode, onDevice)
+        if(muteSound) {
+            // Get AudioManager instance
+            val audioManager = getSystemService(Context.AUDIO_SERVICE) as AudioManager
+
+            // Mute system sounds before starting speech recognition
+            audioManager.setStreamMute(AudioManager.STREAM_SYSTEM, true)
+
+            // Create SpeechRecognizer instance
+            val speechRecognizer = SpeechRecognizer.createSpeechRecognizer(this)
+
+            // Set up the RecognitionListener
+            val recognitionListener = object : RecognitionListener {
+                override fun onReadyForSpeech(params: Bundle?) {
+                    // Speech recognition is ready
+                }
+
+                override fun onResults(results: Bundle?) {
+                    // Unmute system sounds after recognition is complete
+                    audioManager.setStreamMute(AudioManager.STREAM_SYSTEM, false)
+
+                    // Process results
+                    val matches = results?.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION)
+                    matches?.let {
+                        for (result in it) {
+                            println("Recognized text: $result")
+                        }
+                    }
+                }
+
+                override fun onError(error: Int) {
+                    // Unmute system sounds on error
+                    audioManager.setStreamMute(AudioManager.STREAM_SYSTEM, false)
+                }
+
+                // Implement other required methods with empty bodies
+                override fun onBeginningOfSpeech() {}
+                override fun onEndOfSpeech() {}
+                override fun onPartialResults(partialResults: Bundle?) {}
+                override fun onEvent(eventType: Int, params: Bundle?) {}
+                override fun onBufferReceived(buffer: ByteArray?) {}
+                override fun onRmsChanged(rmsdB: Float) {}
+            }
+            // Attach the RecognitionListener
+            speechRecognizer.setRecognitionListener(recognitionListener)
+        }
+
         handler.post {
             run {
                 speechRecognizer?.startListening(recognizerIntent)
@@ -620,7 +669,7 @@ public class SpeechToTextPlugin :
         debugLog("after setup intent")
     }
 
-    private fun setupRecognizerIntent(languageTag: String, partialResults: Boolean, listenMode: ListenMode, onDevice: Boolean ) {
+    private fun setupRecognizerIntent(languageTag: String, partialResults: Boolean, listenMode: ListenMode, onDevice: Boolean) {
         debugLog("setupRecognizerIntent")
         if (previousRecognizerLang == null ||
                 previousRecognizerLang != languageTag ||
